@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Home Warranty Diary Pro</title>
+<title>Warranty Diary</title>
 <meta name="theme-color" content="#4F46E5">
 <style>
   :root{
@@ -328,7 +328,7 @@
   <div class="lock-screen" id="lockScreen">
     <div class="lock-header">
       <div class="lock-title">Enter your PIN</div>
-      <div class="lock-sub" id="lockSubText">Unlock Home Warranty Diary Pro</div>
+      <div class="lock-sub" id="lockSubText">Unlock Warranty Diary</div>
       <div class="lock-sub"><span class="forgot-link" onclick="forgotPin()">Forgot PIN?</span></div>
     </div>
     <div class="pin-dots" id="pinDots"></div>
@@ -345,7 +345,7 @@
   <!-- TOP BAR -->
   <div class="topbar">
     <div>
-      <h1 id="topTitle">Home Warranty Diary</h1>
+      <h1 id="topTitle">Warranty Diary</h1>
       <div class="sub" id="topSub">Never lose your warranty again</div>
     </div>
     <button class="icon-btn" onclick="toggleTheme()">🌓</button>
@@ -454,7 +454,7 @@
 
     <div class="section-title">About</div>
     <div class="settings-item" onclick="showAbout()">
-      <div class="left"><div class="ic">ℹ️</div><div class="txt"><div class="t">About App</div><div class="d">Home Warranty Diary Pro v1.0</div></div></div>
+      <div class="left"><div class="ic">ℹ️</div><div class="txt"><div class="t">About App</div><div class="d">Warranty Diary v1.0</div></div></div>
       <span>›</span>
     </div>
     <div style="text-align:center; font-size:12px; color:var(--text-soft); padding:18px 10px 6px; font-weight:600;">
@@ -842,6 +842,59 @@ async function sendTestNotification(){
   updateAlarmStatus();
 }
 
+/* ============================================================
+   ADS MODULE — AdMob interstitial via Capacitor
+   Requires @capacitor-community/admob (see README_BUILD_INSTRUCTIONS.md).
+   When window.Capacitor is undefined (plain browser preview) every
+   function below is a harmless no-op — the rest of the app keeps
+   working normally.
+   ============================================================ */
+const ADMOB_INTERSTITIAL_ID = 'ca-app-pub-1575997980091765/6011787224';
+let _interstitialReady = false;
+let _interstitialLoading = false;
+
+function getAdMob(){
+  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) || null;
+}
+async function initAds(){
+  const AdMob = getAdMob();
+  if(!AdMob) return;
+  try{
+    await AdMob.initialize({ requestTrackingAuthorization: true });
+  }catch(e){ console.error('AdMob initialize failed', e); }
+  try{
+    AdMob.addListener('interstitialAdLoaded', () => { _interstitialReady = true; _interstitialLoading = false; });
+    AdMob.addListener('interstitialAdFailedToLoad', () => { _interstitialReady = false; _interstitialLoading = false; });
+    AdMob.addListener('interstitialAdDismissed', () => { _interstitialReady = false; loadInterstitial(); });
+    AdMob.addListener('interstitialAdFailedToShow', () => { _interstitialReady = false; loadInterstitial(); });
+  }catch(e){ /* listener API unavailable — ignore */ }
+  loadInterstitial();
+}
+async function loadInterstitial(){
+  const AdMob = getAdMob();
+  if(!AdMob || _interstitialLoading || _interstitialReady) return;
+  _interstitialLoading = true;
+  try{
+    await AdMob.prepareInterstitial({ adId: ADMOB_INTERSTITIAL_ID });
+  }catch(e){
+    _interstitialLoading = false;
+    console.error('AdMob prepareInterstitial failed', e);
+  }
+}
+// Shows the preloaded interstitial if it's ready; otherwise just starts loading
+// one in the background so it's ready for next time (never blocks the caller).
+async function showInterstitial(){
+  const AdMob = getAdMob();
+  if(!AdMob) return;
+  if(_interstitialReady){
+    _interstitialReady = false;
+    try{ await AdMob.showInterstitial(); }
+    catch(e){ console.error('AdMob showInterstitial failed', e); loadInterstitial(); }
+  } else {
+    loadInterstitial();
+  }
+}
+
 /* ---------------- Storage helpers ---------------- */
 function getProducts(){
   try{ return JSON.parse(localStorage.getItem(DB_KEY)) || []; }catch(e){ return []; }
@@ -909,12 +962,13 @@ function toast(msg){
 
 /* ---------------- Navigation ---------------- */
 function goto(screen){
+  const cameFromDetail = state.screen === 'detail' && screen !== 'detail';
   state.screen = screen;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-'+screen).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.screen === screen));
   const titles = {
-    dashboard:['Home Warranty Diary','Never lose your warranty again'],
+    dashboard:['Warranty Diary','Never lose your warranty again'],
     products:['My Products','Manage all your items'],
     reports:['Reports','Insights and exports'],
     settings:['Settings','App preferences'],
@@ -931,6 +985,7 @@ function goto(screen){
   if(screen === 'settings') renderSettingsScreen();
   if(screen === 'premium') renderPremiumScreen();
   updateFabVisibility(screen);
+  if(cameFromDetail) showInterstitial(); // returning from an entry's Detail view to a main screen
 }
 function updateFabVisibility(screen){
   // The + (Add Product) button only makes sense on Home and Products screens.
@@ -1241,6 +1296,7 @@ function saveProduct(e){
   renderDashboard();
   if(state.screen === 'products') renderProductList();
   if(state.screen === 'detail' && state.currentDetailId === id) openDetail(id);
+  showInterstitial(); // data saved successfully — show the full-screen ad now
   return false;
 }
 
@@ -1428,6 +1484,7 @@ function saveServiceRecord(e){
   closeModal('serviceFormOverlay');
   toast('Service record added');
   if(state.currentDetailId === productId) openDetail(productId);
+  showInterstitial(); // data saved successfully — show the full-screen ad now
   return false;
 }
 
@@ -1485,7 +1542,7 @@ function exportReportText(type){
 
 /* ---------------- Backup / Restore ---------------- */
 function exportBackup(){
-  const data = { products: getProducts(), settings: settings, exportedAt: new Date().toISOString(), app:'Home Warranty Diary Pro', version:1 };
+  const data = { products: getProducts(), settings: settings, exportedAt: new Date().toISOString(), app:'Warranty Diary', version:1 };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1545,7 +1602,7 @@ async function updateAlarmStatus(){
   }catch(e){ el.textContent = 'Status unknown'; }
 }
 function showAbout(){
-  alert('Home Warranty Diary Pro\nVersion 1.0\n\nAn offline app to store and track warranty information for all your home products, appliances and valuables.\n\nAll data is stored securely on your device only.\n\nPowered by Waqas MurghiWala');
+  alert('Warranty Diary\nVersion 1.0\n\nAn offline app to store and track warranty information for all your home products, appliances and valuables.\n\nAll data is stored securely on your device only.\n\nPowered by Waqas MurghiWala');
 }
 
 /* Reminder settings modal */
@@ -1692,7 +1749,7 @@ document.getElementById('lockKeypad').addEventListener('click', (e)=>{
 function checkAppLock(){
   if(settings.pinEnabled){
     const sub = document.getElementById('lockSubText');
-    sub.textContent = 'Unlock Home Warranty Diary Pro';
+    sub.textContent = 'Unlock Warranty Diary';
     sub.classList.remove('error-text');
     document.getElementById('lockScreen').classList.add('active');
     state.pinBuffer = '';
@@ -1725,6 +1782,7 @@ function init(){
   checkAppLock();
   if(isNativeApp()){
     rescheduleAllReminders(); // arm real device alarms for every product on every app launch
+    initAds(); // set up AdMob and preload the first interstitial
   }
 }
 init();
