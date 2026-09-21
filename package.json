@@ -1,5 +1,5 @@
 {
-  "name": "home-warranty-diary-pro",
+  "name": "home-warranty-diary",
   "version": "1.0.0",
   "description": "Offline home warranty & product management app with real device alarm reminders",
   "private": true,
@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
-    "@capacitor/android": "^6.1.2"
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/assets": "^3.0.5"
   }
 }
