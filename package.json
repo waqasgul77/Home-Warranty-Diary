@@ -1,0 +1,20 @@
+{
+  "name": "warranty-diary",
+  "version": "1.0.0",
+  "description": "Offline warranty & product management app with real device alarm reminders",
+  "private": true,
+  "scripts": {
+    "sync": "npx cap sync android",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/local-notifications": "^6.1.0",
+    "@capacitor-community/admob": "^6.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/assets": "^3.0.5"
+  }
+}
