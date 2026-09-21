@@ -23,18 +23,22 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install npm dependencies
         run: npm install
 
-      - name: Create dummy web folder if missing
-        run: |
-          mkdir -p www
-          if [ ! -f www/index.html ]; then
-            echo "<HTML><BODY>Home Warranty Diary</BODY></HTML>" > www/index.html
-          fi
-
       - name: Add Android platform
         run: npx cap add android
+
+      - name: Generate app & notification icons from assets/
+        run: npx capacitor-assets generate --android --assetPath assets
+
+      - name: Install custom notification icon
+        run: |
+          mkdir -p android/app/src/main/res/drawable
+          cp assets/ic_stat_icon.png android/app/src/main/res/drawable/ic_stat_icon.png
 
       - name: Sync Capacitor web assets into the Android project
         run: npx cap sync android
@@ -51,4 +55,3 @@ jobs:
         with:
           name: HomeWarrantyDiaryPro-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
