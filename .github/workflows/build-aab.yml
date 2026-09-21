@@ -2,48 +2,50 @@ name: Build Android Release AAB
 
 on:
   push:
-    branches: [ main, master ] # یا آپ کی جو بھی مین برانچ ہو
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+    - name: Checkout Code
+      uses: actions/checkout@v3
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '17'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
 
-      - name: Install Dependencies
-        run: |
-          npm install
+    - name: Install Dependencies
+      run: npm install
 
-      - name: Build Web Assets
-        run: |
-          npm run build || true # اگر آپ کا کوئی بلڈ سکرپٹ ہو
+    - name: Build Web Assets
+      run: npm run build
 
-      - name: Add Android Platform
-        run: |
-          npx cap add android || true
-          npx cap sync android
+    - name: Generate Keystore Automatically
+      run: |
+        keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 \
+        -alias ${{ secrets.ALIAS_NAME }} \
+        -keypass ${{ secrets.KEY_PASSWORD }} \
+        -storepass ${{ secrets.STORE_PASSWORD }} \
+        -dname "CN=Android, OU=Development, O=Organization, L=City, ST=State, C=US"
 
-      - name: Build AAB
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew bundleRelease
+    - name: Build Signed Release AAB
+      run: |
+        cd android
+        ./gradlew bundleRelease \
+        -Pandroid.injected.signing.store.file=../release-key.jks \
+        -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+        -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS_NAME }} \
+        -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload AAB Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-aab
-          path: android/app/build/outputs/bundle/release/app-release.aab
-          
+    - name: Upload Generated AAB
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-aab-file
+        path: android/app/build/outputs/bundle/release/app-release.aab
