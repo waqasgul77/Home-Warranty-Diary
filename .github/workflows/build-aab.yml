@@ -21,9 +21,6 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Build Web Assets
-      run: npm run build
-
     - name: Generate Keystore Automatically
       run: |
         keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 \
