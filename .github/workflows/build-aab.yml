@@ -21,56 +21,10 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '18'
 
     - name: Install Dependencies
       run: npm install
-
-    - name: Add Android platform
-      run: npx cap add android
-
-    - name: Configure AdMob App ID
-      run: |
-        python3 - <<'PYEOF'
-        import re
-
-        ADMOB_APP_ID = "ca-app-pub-1575997980091765~7586477365"
-
-        strings_path = "android/app/src/main/res/values/strings.xml"
-        with open(strings_path, "r", encoding="utf-8") as f:
-            strings_xml = f.read()
-        if "admob_app_id" not in strings_xml:
-            strings_xml = strings_xml.replace(
-                "</resources>",
-                f'    <string name="admob_app_id">{ADMOB_APP_ID}</string>\n</resources>'
-            )
-            with open(strings_path, "w", encoding="utf-8") as f:
-                f.write(strings_xml)
-
-        manifest_path = "android/app/src/main/AndroidManifest.xml"
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest_xml = f.read()
-        if "com.google.android.gms.ads.APPLICATION_ID" not in manifest_xml:
-            meta_data = (
-                '\n    <meta-data\n'
-                '        android:name="com.google.android.gms.ads.APPLICATION_ID"\n'
-                '        android:value="@string/admob_app_id"/>'
-            )
-            manifest_xml = re.sub(r'(<application[^>]*>)', r'\1' + meta_data, manifest_xml, count=1)
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                f.write(manifest_xml)
-        PYEOF
-
-    - name: Generate app & notification icons from assets/
-      run: npx capacitor-assets generate --android --assetPath assets
-
-    - name: Install custom notification icon
-      run: |
-        mkdir -p android/app/src/main/res/drawable
-        cp assets/ic_stat_icon.png android/app/src/main/res/drawable/ic_stat_icon.png
-
-    - name: Sync Capacitor web assets into the Android project
-      run: npx cap sync android
 
     - name: Generate Keystore Automatically
       run: |
@@ -80,11 +34,9 @@ jobs:
         -storepass ${{ secrets.STORE_PASSWORD }} \
         -dname "CN=Android, OU=Development, O=Organization, L=City, ST=State, C=US"
 
-    - name: Make gradlew executable
-      run: chmod +x android/gradlew
-
     - name: Build Signed Release AAB
       run: |
+        chmod +x android/gradlew
         cd android
         ./gradlew bundleRelease \
         -Pandroid.injected.signing.store.file=../release-key.jks \
