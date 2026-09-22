@@ -30,36 +30,7 @@ jobs:
       run: npx cap add android
 
     - name: Configure AdMob App ID
-      run: |
-        python3 - <<'PYEOF'
-        import re
-
-        ADMOB_APP_ID = "ca-app-pub-1575997980091765~7586477365"
-
-        strings_path = "android/app/src/main/res/values/strings.xml"
-        with open(strings_path, "r", encoding="utf-8") as f:
-            strings_xml = f.read()
-        if "admob_app_id" not in strings_xml:
-            strings_xml = strings_xml.replace(
-                "</resources>",
-                f'    <string name="admob_app_id">{ADMOB_APP_ID}</string>\n</resources>'
-            )
-            with open(strings_path, "w", encoding="utf-8") as f:
-                f.write(strings_xml)
-
-        manifest_path = "android/app/src/main/AndroidManifest.xml"
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest_xml = f.read()
-        if "com.google.android.gms.ads.APPLICATION_ID" not in manifest_xml:
-            meta_data = (
-                '\n    <meta-data\n'
-                '        android:name="com.google.android.gms.ads.APPLICATION_ID"\n'
-                '        android:value="@string/admob_app_id"/>'
-            )
-            manifest_xml = re.sub(r'(<application[^>]*>)', r'\1' + meta_data, manifest_xml, count=1)
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                f.write(manifest_xml)
-        PYEOF
+      run: python3 scripts/configure_admob.py
 
     - name: Generate app & notification icons from assets/
       run: npx capacitor-assets generate --android --assetPath assets
@@ -74,10 +45,25 @@ jobs:
 
     - name: Generate Keystore Automatically
       run: |
-        keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 \
-        -alias ${{ secrets.ALIAS_NAME }} \
-        -keypass ${{ secrets.KEY_PASSWORD }} \
-        -storepass ${{ secrets.STORE_PASSWORD }} \
-        -dname "CN=Android, OU=Development, O=Organization, L=City, ST=State, C=US"
+        keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias ${{ secrets.ALIAS_NAME }} -keypass ${{ secrets.KEY_PASSWORD }} -storepass ${{ secrets.STORE_PASSWORD }} -dname "CN=Android, OU=Development, O=Organization, L=City, ST=State, C=US"
 
-    - name: Configure release signing in build.
+    - name: Configure release signing in build.gradle
+      run: python3 scripts/configure_signing.py
+
+    - name: Make gradlew executable
+      run: chmod +x android/gradlew
+
+    - name: Build Signed Release AAB
+      working-directory: android
+      env:
+        RELEASE_KEYSTORE_PATH: ${{ github.workspace }}/release-key.jks
+        RELEASE_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        RELEASE_KEY_ALIAS: ${{ secrets.ALIAS_NAME }}
+        RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: ./gradlew bundleRelease --stacktrace
+
+    - name: Upload Generated AAB
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-aab-file
+        path: android/app/build/outputs/bundle/release/app-release.aab
