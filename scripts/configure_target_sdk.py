@@ -2,8 +2,8 @@
 """
 Google Play requires apps to target a recent Android API level (it moves up
 roughly once a year). This script bumps the generated Capacitor Android
-project to target/compile API 36, updates minSdkVersion to 23, and bumps the
-Android Gradle Plugin + Gradle wrapper to versions that know how to build against API 36.
+project to target/compile API 36, and bumps the Android Gradle Plugin +
+Gradle wrapper to versions that know how to build against API 36.
 
 Run this AFTER `npx cap add android` and BEFORE the gradle build step.
 """
@@ -14,7 +14,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 ANDROID = ROOT / "android"
 
 TARGET_API = "36"
-MIN_API = "23"
 AGP_VERSION = "8.7.2"
 GRADLE_VERSION = "8.9"
 
@@ -32,13 +31,7 @@ def patch(path, pattern, replacement, label):
         print(f"WARNING: pattern for {label} not found in {path} — check manually")
 
 
-# 1) variables.gradle — minSdkVersion / compileSdkVersion / targetSdkVersion
-patch(
-    ANDROID / "variables.gradle",
-    r"minSdkVersion\s*=\s*\d+",
-    f"minSdkVersion = {MIN_API}",
-    "minSdkVersion",
-)
+# 1) variables.gradle — compileSdkVersion / targetSdkVersion
 patch(
     ANDROID / "variables.gradle",
     r"compileSdkVersion\s*=\s*\d+",
@@ -68,4 +61,4 @@ patch(
     "Gradle wrapper version",
 )
 
-print("Target SDK and Min SDK configuration complete.")
+print("Target SDK configuration complete.")
