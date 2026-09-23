@@ -46,9 +46,8 @@ jobs:
     - name: Sync Capacitor web assets into the Android project
       run: npx cap sync android
 
-    - name: Generate Keystore Automatically
-      run: |
-        keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias ${{ secrets.ALIAS_NAME }} -keypass ${{ secrets.KEY_PASSWORD }} -storepass ${{ secrets.STORE_PASSWORD }} -dname "CN=Android, OU=Development, O=Organization, L=City, ST=State, C=US"
+    - name: Decode Release Keystore (fixed, reused every build)
+      run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
 
     - name: Configure release signing in build.gradle
       run: python3 scripts/configure_signing.py
