@@ -29,6 +29,9 @@ jobs:
     - name: Add Android platform
       run: npx cap add android
 
+    - name: Target latest Android API level (Play Store requirement)
+      run: python3 scripts/configure_target_sdk.py
+
     - name: Configure AdMob App ID
       run: python3 scripts/configure_admob.py
 
