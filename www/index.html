@@ -467,9 +467,9 @@
     <div class="section-title">⭐ Upgrade Your Plan</div>
     <div class="plan-card" id="freePlanCard">
       <h3>Free</h3>
-      <div class="price">₹0</div>
+      <div class="price">Free</div>
       <ul>
-        <li>Up to 15 products</li>
+        <li>Up to 10 products</li>
         <li>Basic reports</li>
         <li>Standard backup</li>
         <li>Contains ads</li>
@@ -477,7 +477,7 @@
     </div>
     <div class="plan-card premium" id="premiumPlanCard">
       <h3>Premium ⭐</h3>
-      <div class="price">₹299 <span style="font-size:12px;color:var(--text-soft);font-weight:600;">/ year</span></div>
+      <div class="price" id="premiumPriceText">Loading price…</div>
       <ul>
         <li>Unlimited products</li>
         <li>Advanced reports &amp; export</li>
@@ -485,9 +485,11 @@
         <li>No ads</li>
         <li>Priority support</li>
       </ul>
-      <button class="btn btn-primary" style="margin-top:10px;" id="premiumActionBtn" onclick="togglePremium()">Upgrade to Premium</button>
+      <button class="btn btn-primary" style="margin-top:10px;" id="premiumActionBtn" onclick="purchasePremium()">Upgrade to Premium</button>
     </div>
-    <div style="font-size:11.5px; color:var(--text-soft); text-align:center; padding:0 10px;">This is a demo premium toggle for app structure purposes. Connect real payment/licensing before publishing.</div>
+    <div style="text-align:center; padding:6px 10px 0;">
+      <span class="link" style="font-size:13px;" onclick="restorePurchases()">Restore purchases</span>
+    </div>
   </div>
 
   <!-- BOTTOM NAV -->
@@ -722,7 +724,7 @@
 
 const DB_KEY = 'hwdp_products_v1';
 const SETTINGS_KEY = 'hwdp_settings_v1';
-const FREE_LIMIT = 15;
+const FREE_LIMIT = 10;
 
 let state = {
   screen: 'dashboard',
@@ -884,6 +886,7 @@ async function loadInterstitial(){
 // Shows the preloaded interstitial if it's ready; otherwise just starts loading
 // one in the background so it's ready for next time (never blocks the caller).
 async function showInterstitial(){
+  if(settings.premium) return; // Premium users never see ads
   const AdMob = getAdMob();
   if(!AdMob) return;
   if(_interstitialReady){
@@ -893,6 +896,119 @@ async function showInterstitial(){
   } else {
     loadInterstitial();
   }
+}
+
+/* ============================================================
+   PURCHASES MODULE — Real Google Play Billing via RevenueCat
+   Requires @revenuecat/purchases-capacitor (see README_BILLING.md).
+   IMPORTANT: replace REVENUECAT_ANDROID_API_KEY below with your own
+   public Android API key from app.revenuecat.com, and replace
+   PREMIUM_ENTITLEMENT_ID / PREMIUM_OFFERING_ID if you name them
+   differently in the RevenueCat dashboard.
+   When window.Capacitor is undefined (plain browser preview) every
+   function below is a harmless no-op — the rest of the app keeps
+   working normally.
+   ============================================================ */
+const REVENUECAT_ANDROID_API_KEY = 'goog_REPLACE_WITH_YOUR_REVENUECAT_PUBLIC_API_KEY';
+const PREMIUM_ENTITLEMENT_ID = 'premium';
+
+function getPurchases(){
+  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases) || null;
+}
+
+async function initPurchases(){
+  const Purchases = getPurchases();
+  if(!Purchases) return;
+  try{
+    await Purchases.configure({ apiKey: REVENUECAT_ANDROID_API_KEY });
+  }catch(e){ console.error('RevenueCat configure failed', e); return; }
+  await syncPremiumFromServer();
+}
+
+// Ask RevenueCat/Google who actually owns premium right now, and make the
+// local settings.premium flag match it (source of truth = the store, not localStorage).
+async function syncPremiumFromServer(){
+  const Purchases = getPurchases();
+  if(!Purchases) return;
+  try{
+    const { customerInfo } = await Purchases.getCustomerInfo();
+    applyEntitlement(customerInfo);
+  }catch(e){ console.error('RevenueCat getCustomerInfo failed', e); }
+}
+
+function applyEntitlement(customerInfo){
+  const isPremium = !!(customerInfo && customerInfo.entitlements &&
+    customerInfo.entitlements.active && customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID]);
+  if(settings.premium !== isPremium){
+    settings.premium = isPremium;
+    saveSettings(settings);
+  }
+  renderPremiumScreen();
+  renderSettingsScreen();
+}
+
+// Called from the "Upgrade to Premium" button — starts the real Google Play payment sheet.
+async function purchasePremium(){
+  const Purchases = getPurchases();
+  if(!Purchases){
+    toast('Purchases are only available in the installed app, not this preview.');
+    return;
+  }
+  const btn = document.getElementById('premiumActionBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Processing…'; }
+  try{
+    const offerings = await Purchases.getOfferings();
+    const pkg = offerings && offerings.current && offerings.current.availablePackages
+      && offerings.current.availablePackages[0];
+    if(!pkg){
+      toast('No premium plan is configured yet — check Play Console & RevenueCat.');
+      return;
+    }
+    const { customerInfo } = await Purchases.purchasePackage({ aPackage: pkg });
+    applyEntitlement(customerInfo);
+    if(settings.premium) toast('Premium unlocked! 🎉 Thank you.');
+  }catch(e){
+    if(!(e && (e.userCancelled || e.code === 'PURCHASE_CANCELLED_ERROR'))){
+      console.error('Purchase failed', e);
+      toast('Purchase could not be completed. Please try again.');
+    }
+  }finally{
+    if(btn) btn.disabled = false;
+    renderPremiumScreen();
+  }
+}
+
+// Required by Play Store policy: lets a user who already paid (e.g. after
+// reinstalling, or on a new device) get their Premium status back for free.
+async function restorePurchases(){
+  const Purchases = getPurchases();
+  if(!Purchases){
+    toast('Restore is only available in the installed app, not this preview.');
+    return;
+  }
+  try{
+    const { customerInfo } = await Purchases.restorePurchases();
+    applyEntitlement(customerInfo);
+    toast(settings.premium ? 'Premium restored! 🎉' : 'No previous purchase found on this account.');
+  }catch(e){
+    console.error('Restore failed', e);
+    toast('Could not restore purchases. Please try again.');
+  }
+}
+
+// Shows the real localized price from Google Play on the Premium screen
+// instead of a hardcoded number (required — the price must match what Play charges).
+async function renderPremiumPricing(){
+  const priceEl = document.getElementById('premiumPriceText');
+  if(!priceEl) return;
+  const Purchases = getPurchases();
+  if(!Purchases){ priceEl.textContent = 'Preview only — real price shows in the installed app'; return; }
+  try{
+    const offerings = await Purchases.getOfferings();
+    const pkg = offerings && offerings.current && offerings.current.availablePackages
+      && offerings.current.availablePackages[0];
+    priceEl.textContent = pkg ? pkg.product.priceString : 'Plan not configured yet';
+  }catch(e){ priceEl.textContent = ''; }
 }
 
 /* ---------------- Storage helpers ---------------- */
@@ -1623,18 +1739,15 @@ function saveReminderSettings(){
 /* Premium */
 function renderPremiumScreen(){
   const btn = document.getElementById('premiumActionBtn');
+  if(!btn) return;
   if(settings.premium){
-    btn.textContent = 'Downgrade to Free';
+    btn.textContent = 'You are Premium ⭐';
+    btn.disabled = true;
   } else {
     btn.textContent = 'Upgrade to Premium';
+    btn.disabled = false;
+    renderPremiumPricing();
   }
-}
-function togglePremium(){
-  settings.premium = !settings.premium;
-  saveSettings(settings);
-  renderPremiumScreen();
-  renderSettingsScreen();
-  toast(settings.premium ? 'Premium unlocked! 🎉' : 'Switched to Free plan');
 }
 
 /* ---------------- App Lock / PIN ---------------- */
@@ -1783,6 +1896,7 @@ function init(){
   if(isNativeApp()){
     rescheduleAllReminders(); // arm real device alarms for every product on every app launch
     initAds(); // set up AdMob and preload the first interstitial
+    initPurchases(); // connect to RevenueCat/Google Play and sync real Premium status
   }
 }
 init();
